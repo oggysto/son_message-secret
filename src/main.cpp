@@ -26,9 +26,9 @@
 #define BTN_PLAY    1    // Bouton pour rejouer
 
 // Paramètres audio
-#define RECORD_TIME_SEC  2                    // Durée max: 2 secondes
+#define RECORD_TIME_SEC  4                    // Durée max: 4 secondes
 #define SAMPLE_RATE      44100                // Hz
-#define MAX_SAMPLES      (SAMPLE_RATE * RECORD_TIME_SEC)  // 88200 samples
+#define MAX_SAMPLES      (SAMPLE_RATE * RECORD_TIME_SEC)  // 176400 samples
 
 // ============================================================
 // OBJETS AUDIO
@@ -131,7 +131,7 @@ void setup() {
   Serial.println("[OK] Mixers configurés");
 
   Serial.println("\n--- PRÊT ---");
-  Serial.println("Bouton 0: RECORD (2s max)");
+  Serial.println("Bouton 0: RECORD (4s max)");
   Serial.println("Bouton 1: PLAY");
   Serial.println("Suivez les messages dans le Serial Monitor");
   Serial.println("----------------\n");
