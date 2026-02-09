@@ -23,8 +23,7 @@
 
 // Pins des boutons
 #define BTN_RECORD  0    // Bouton pour enregistrer
-#define BTN_PLAY    1    // Bouton pour rejouer
-#define BTN_PLAY2   2    // Bouton pour rejouer (2ème bouton)
+#define BTN_PLAY    1    // Bouton pour jouer en inversé
 
 // Paramètres audio
 #define RECORD_TIME_SEC  4                    // Durée max: 4 secondes
@@ -69,7 +68,6 @@ AudioConnection patchCord7(mixerRight, 0, i2s_output, 1);     // Mixer R → Rig
 void startRecording();
 void handleRecording();
 void stopRecording();
-void playRecording();
 void playRecordingReversed();
 int16_t softClip(int16_t sample);
 
@@ -107,7 +105,6 @@ void setup() {
   // Configuration des pins
   pinMode(BTN_RECORD, INPUT);
   pinMode(BTN_PLAY, INPUT);
-  pinMode(BTN_PLAY2, INPUT);
 
   // Allocation mémoire audio (augmentée pour éviter perte de samples)
   AudioMemory(120);  // Doublé de 60 à 120
@@ -136,8 +133,7 @@ void setup() {
 
   Serial.println("\n--- PRÊT ---");
   Serial.println("Bouton 0: RECORD (4s max)");
-  Serial.println("Bouton 1: PLAY (normal)");
-  Serial.println("Bouton 2: PLAY INVERSÉ (à l'envers)");
+  Serial.println("Bouton 1: PLAY INVERSÉ (pour Teensy 2)");
   Serial.println("Suivez les messages dans le Serial Monitor");
   Serial.println("----------------\n");
 }
@@ -166,23 +162,13 @@ void loop() {
     handleRecording();
   }
 
-  // Bouton PLAY (seulement si on n'enregistre PAS)
+  // Bouton PLAY (lecture inversée pour transmission au Teensy 2)
   if (digitalRead(BTN_PLAY) == HIGH && !isRecording) {
     delay(50);  // Anti-rebond (OK car pas pendant enregistrement)
     if (digitalRead(BTN_PLAY) == HIGH) {
-      Serial.println("[INFO] Bouton 1 pressé");
-      playRecording();
-      while (digitalRead(BTN_PLAY) == HIGH) delay(10);  // Attendre relâchement
-    }
-  }
-
-  // Bouton PLAY 2 (lecture inversée = son à l'envers)
-  if (digitalRead(BTN_PLAY2) == HIGH && !isRecording) {
-    delay(50);  // Anti-rebond
-    if (digitalRead(BTN_PLAY2) == HIGH) {
-      Serial.println("[INFO] Bouton 2 pressé - LECTURE INVERSÉE");
+      Serial.println("[INFO] Bouton 1 pressé - LECTURE INVERSÉE");
       playRecordingReversed();
-      while (digitalRead(BTN_PLAY2) == HIGH) delay(10);  // Attendre relâchement
+      while (digitalRead(BTN_PLAY) == HIGH) delay(10);  // Attendre relâchement
     }
   }
 
@@ -316,58 +302,6 @@ void stopRecording() {
   }
   
   Serial.println("    ⏸️ Attendre 2 secondes avant nouvel enregistrement...\n");
-}
-
-void playRecording() {
-  if (recordedSamples == 0) {
-    Serial.println("[ERREUR] Aucun enregistrement disponible!");
-    Serial.println("         Appuyez sur Bouton 0 pour enregistrer d'abord.\n");
-    return;
-  }
-
-  Serial.println("\n>>> LECTURE EN COURS...");
-  Serial.print("    Durée enregistrement: ");
-  Serial.print(recordedSamples / (float)SAMPLE_RATE, 2);
-  Serial.println(" secondes");
-  Serial.print("    DEBUG: Envoi de ");
-  Serial.print(recordedSamples);
-  Serial.println(" samples...");
-  Serial.print(recordedSamples);
-  Serial.println(" samples...");
-
-  // Envoyer les données par blocs de 128 samples
-  unsigned int sampleIndex = 0;
-  unsigned int blocksPlayed = 0;
-  
-  while (sampleIndex < recordedSamples) {
-    // Attendre qu'un buffer soit disponible
-    int16_t* txBuffer = playQueue.getBuffer();
-    if (txBuffer) {
-      // Copier jusqu'à 128 samples avec soft clipping
-      for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
-        if (sampleIndex < recordedSamples) {
-          txBuffer[i] = softClip(audioBuffer[sampleIndex++]);
-        } else {
-          txBuffer[i] = 0;  // Padding avec silence
-        }
-      }
-      playQueue.playBuffer();  // Envoyer le buffer
-      blocksPlayed++;
-    } else {
-      // Attendre qu'un buffer se libère (environ 2.9ms par bloc à 44.1kHz)
-      delay(3);
-    }
-  }
-  
-  // Attendre que tous les buffers soient joués
-  // Calcul: nombre de blocs * 2.9ms par bloc
-  unsigned int totalBlocks = (recordedSamples + AUDIO_BLOCK_SAMPLES - 1) / AUDIO_BLOCK_SAMPLES;
-  delay(totalBlocks * 3);
-  
-  Serial.print("    DEBUG: ");
-  Serial.print(blocksPlayed);
-  Serial.println(" blocs envoyés");
-  Serial.println(">>> LECTURE TERMINÉE\n");
 }
 
 void playRecordingReversed() {

@@ -30,6 +30,12 @@
 			"type": "shell",
 			"command": "platformio run --target upload",
 			"group": "build"
+		},
+		{
+			"label": "Upload Teensy 1 - 2 buttons",
+			"type": "shell",
+			"command": "platformio run --target upload",
+			"group": "build"
 		}
 	]
 }
