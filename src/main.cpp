@@ -70,6 +70,7 @@ void startRecording();
 void handleRecording();
 void stopRecording();
 void playRecording();
+void playRecordingReversed();
 int16_t softClip(int16_t sample);
 
 // ============================================================
@@ -135,8 +136,8 @@ void setup() {
 
   Serial.println("\n--- PRÊT ---");
   Serial.println("Bouton 0: RECORD (4s max)");
-  Serial.println("Bouton 1: PLAY");
-  Serial.println("Bouton 2: PLAY (aussi)");
+  Serial.println("Bouton 1: PLAY (normal)");
+  Serial.println("Bouton 2: PLAY INVERSÉ (à l'envers)");
   Serial.println("Suivez les messages dans le Serial Monitor");
   Serial.println("----------------\n");
 }
@@ -175,12 +176,12 @@ void loop() {
     }
   }
 
-  // Bouton PLAY 2 (même fonction que bouton 1)
+  // Bouton PLAY 2 (lecture inversée = son à l'envers)
   if (digitalRead(BTN_PLAY2) == HIGH && !isRecording) {
     delay(50);  // Anti-rebond
     if (digitalRead(BTN_PLAY2) == HIGH) {
-      Serial.println("[INFO] Bouton 2 pressé");
-      playRecording();
+      Serial.println("[INFO] Bouton 2 pressé - LECTURE INVERSÉE");
+      playRecordingReversed();
       while (digitalRead(BTN_PLAY2) == HIGH) delay(10);  // Attendre relâchement
     }
   }
@@ -367,6 +368,49 @@ void playRecording() {
   Serial.print(blocksPlayed);
   Serial.println(" blocs envoyés");
   Serial.println(">>> LECTURE TERMINÉE\n");
+}
+
+void playRecordingReversed() {
+  if (recordedSamples == 0) {
+    Serial.println("[ERREUR] Aucun enregistrement disponible!");
+    Serial.println("         Appuyez sur Bouton 0 pour enregistrer d'abord.\n");
+    return;
+  }
+
+  Serial.println("\n>>> LECTURE INVERSÉE...");
+  Serial.print("    Durée enregistrement: ");
+  Serial.print(recordedSamples / (float)SAMPLE_RATE, 2);
+  Serial.println(" secondes");
+
+  // Envoyer les données par blocs de 128 samples EN SENS INVERSE
+  int sampleIndex = recordedSamples - 1;  // Commencer à la fin
+  unsigned int blocksPlayed = 0;
+  
+  while (sampleIndex >= 0) {
+    // Attendre qu'un buffer soit disponible
+    int16_t* txBuffer = playQueue.getBuffer();
+    if (txBuffer) {
+      // Copier jusqu'à 128 samples avec soft clipping EN SENS INVERSE
+      for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
+        if (sampleIndex >= 0) {
+          txBuffer[i] = softClip(audioBuffer[sampleIndex--]);  // Index décrémente
+        } else {
+          txBuffer[i] = 0;  // Padding avec silence
+        }
+      }
+      playQueue.playBuffer();  // Envoyer le buffer
+      blocksPlayed++;
+    } else {
+      // Attendre qu'un buffer se libère (environ 2.9ms par bloc à 44.1kHz)
+      delay(3);
+    }
+  }
+  
+  // Attendre que tous les buffers soient joués
+  unsigned int totalBlocks = (recordedSamples + AUDIO_BLOCK_SAMPLES - 1) / AUDIO_BLOCK_SAMPLES;
+  delay(totalBlocks * 3);
+  
+  Serial.println(">>> LECTURE INVERSÉE TERMINÉE\n");
 }
 
 // ============================================================

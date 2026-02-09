@@ -24,6 +24,12 @@
 			"type": "shell",
 			"command": "platformio run --target upload",
 			"group": "build"
+		},
+		{
+			"label": "Upload Reversed Play",
+			"type": "shell",
+			"command": "platformio run --target upload",
+			"group": "build"
 		}
 	]
 }
