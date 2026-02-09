@@ -69,6 +69,7 @@ void startRecording();
 void handleRecording();
 void stopRecording();
 void playRecording();
+int16_t softClip(int16_t sample);
 
 // ============================================================
 // VARIABLES GLOBALES
@@ -111,12 +112,12 @@ void setup() {
 
   // Configuration Audio Shield
   audioShield.enable();
-  audioShield.volume(0.4);  // Volume baissé
+  audioShield.volume(0.7);  // Volume casque augmenté pour meilleure audibilité
   
   // *** MICROPHONE ACTIVÉ ***
   audioShield.inputSelect(AUDIO_INPUT_MIC);
-  audioShield.micGain(50);
-  Serial.println("[OK] Audio Shield configuré (MIC - Gain 50)");
+  audioShield.micGain(20);  // Gain réduit de 50 à 20 dB (recommandation cours)
+  Serial.println("[OK] Audio Shield configuré (MIC - Gain 20)");
 
   // Configuration des mixers
   mixerLeft.gain(0, 1.0);   // PlayQueue sur canal 0 à gain 1.0
@@ -327,10 +328,10 @@ void playRecording() {
     // Attendre qu'un buffer soit disponible
     int16_t* txBuffer = playQueue.getBuffer();
     if (txBuffer) {
-      // Copier jusqu'à 128 samples
+      // Copier jusqu'à 128 samples avec soft clipping
       for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
         if (sampleIndex < recordedSamples) {
-          txBuffer[i] = audioBuffer[sampleIndex++];
+          txBuffer[i] = softClip(audioBuffer[sampleIndex++]);
         } else {
           txBuffer[i] = 0;  // Padding avec silence
         }
@@ -352,4 +353,21 @@ void playRecording() {
   Serial.print(blocksPlayed);
   Serial.println(" blocs envoyés");
   Serial.println(">>> LECTURE TERMINÉE\n");
+}
+
+// ============================================================
+// SOFT CLIPPING (anti-saturation)
+// ============================================================
+
+int16_t softClip(int16_t sample) {
+  // Convertir en float normalisé [-1.0, 1.0]
+  float normalized = sample / 32767.0f;
+  
+  // Soft clipping: tanh donne une saturation douce
+  // Pour un clipping plus dur, on peut utiliser max/min
+  if (normalized > 1.0f) normalized = 1.0f;
+  if (normalized < -1.0f) normalized = -1.0f;
+  
+  // Reconvertir en int16
+  return (int16_t)(normalized * 32767.0f);
 }
