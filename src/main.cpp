@@ -53,7 +53,7 @@ AudioMixer4              mixerRight;
 AudioControlSGTL5000     audioShield;
 
 // Connexions (patch cords)
-AudioConnection patchCord1(i2s_input, 0, recordQueue, 0);     // Mic → Record Queue
+AudioConnection patchCord1(i2s_input, 1, recordQueue, 0);     // Mic RIGHT → Record Queue
 AudioConnection patchCord2(playQueue, 0, mixerLeft, 0);       // PlayQueue → Mixer L
 AudioConnection patchCord3(playQueue, 0, mixerRight, 0);      // PlayQueue → Mixer R
 AudioConnection patchCord4(testTone, 0, mixerLeft, 1);        // TestTone → Mixer L
@@ -69,7 +69,6 @@ void startRecording();
 void handleRecording();
 void stopRecording();
 void playRecording();
-void testHeadphones();  // Nouveau test
 
 // ============================================================
 // VARIABLES GLOBALES
@@ -112,36 +111,24 @@ void setup() {
 
   // Configuration Audio Shield
   audioShield.enable();
-  audioShield.volume(0.5);                    // Volume réduit pour tester
+  audioShield.volume(0.4);  // Volume baissé
   
-  // *** MICROPHONE DÉSACTIVÉ (bruit électrique) ***
-  // audioShield.inputSelect(AUDIO_INPUT_MIC);
-  // audioShield.micGain(40);
-  // audioShield.audioProcessorDisable();
-  // Serial.println("[OK] Audio Shield configuré (MIC - Gain 40)");
-  
-  // *** LINE IN ACTIVÉ (brancher source externe) ***
-  audioShield.inputSelect(AUDIO_INPUT_LINEIN);
-  audioShield.lineInLevel(5);                 // Gain moyen (0-15)
-  Serial.println("[OK] Audio Shield configuré (LINE IN - Gain 5)");
-  Serial.println("    ⚠️  BRANCHEZ UN APPAREIL dans LINE IN du shield !");
-  Serial.println("    (téléphone, ordinateur, lecteur MP3, etc.)");
+  // *** MICROPHONE ACTIVÉ ***
+  audioShield.inputSelect(AUDIO_INPUT_MIC);
+  audioShield.micGain(50);
+  Serial.println("[OK] Audio Shield configuré (MIC - Gain 50)");
 
   // Configuration des mixers
   mixerLeft.gain(0, 1.0);   // PlayQueue sur canal 0 à gain 1.0
-  mixerLeft.gain(1, 1.0);   // TestTone sur canal 1 à gain 1.0
+  mixerLeft.gain(1, 0);     // TestTone désactivé
   mixerLeft.gain(2, 0);     // Canaux inutilisés
   mixerLeft.gain(3, 0);
   
   mixerRight.gain(0, 1.0);  // PlayQueue sur canal 0 à gain 1.0
-  mixerRight.gain(1, 1.0);  // TestTone sur canal 1 à gain 1.0
+  mixerRight.gain(1, 0);    // TestTone désactivé
   mixerRight.gain(2, 0);    // Canaux inutilisés
   mixerRight.gain(3, 0);
   Serial.println("[OK] Mixers configurés");
-
-  // TEST DU CASQUE avec tonalité
-  Serial.println("\n[TEST] Vérification du casque...");
-  testHeadphones();
 
   Serial.println("\n--- PRÊT ---");
   Serial.println("Bouton 0: RECORD (2s max)");
@@ -323,23 +310,12 @@ void playRecording() {
   }
 
   Serial.println("\n>>> LECTURE EN COURS...");
-  
-  // Jouer 3 notes avant l'enregistrement
-  Serial.println("    🎵 Notes de test (Do-Mi-Sol)...");
-  testTone.frequency(262);  // Do
-  testTone.amplitude(0.3);
-  delay(300);
-  testTone.frequency(330);  // Mi
-  delay(300);
-  testTone.frequency(392);  // Sol
-  delay(300);
-  testTone.amplitude(0);    // Arrêter
-  delay(200);               // Petite pause
-  
   Serial.print("    Durée enregistrement: ");
   Serial.print(recordedSamples / (float)SAMPLE_RATE, 2);
   Serial.println(" secondes");
   Serial.print("    DEBUG: Envoi de ");
+  Serial.print(recordedSamples);
+  Serial.println(" samples...");
   Serial.print(recordedSamples);
   Serial.println(" samples...");
 
@@ -376,27 +352,4 @@ void playRecording() {
   Serial.print(blocksPlayed);
   Serial.println(" blocs envoyés");
   Serial.println(">>> LECTURE TERMINÉE\n");
-}
-
-void testHeadphones() {
-  Serial.println("    Lecture de 3 notes (Do-Mi-Sol)...");
-  
-  // Note 1: Do (261.63 Hz)
-  testTone.frequency(262);
-  testTone.amplitude(0.3);
-  delay(500);
-  
-  // Note 2: Mi (329.63 Hz)
-  testTone.frequency(330);
-  delay(500);
-  
-  // Note 3: Sol (392.00 Hz)
-  testTone.frequency(392);
-  delay(500);
-  
-  // Arrêter
-  testTone.amplitude(0);
-  
-  Serial.println("    [OK] Si vous avez entendu 3 notes, le casque fonctionne!");
-  Serial.println("    [ERREUR] Si silence, vérifier branchement du casque");
 }
