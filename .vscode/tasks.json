@@ -12,6 +12,18 @@
 			"type": "shell",
 			"command": "platformio run --target upload",
 			"group": "build"
+		},
+		{
+			"label": "Upload After Cleanup",
+			"type": "shell",
+			"command": "platformio run --target upload",
+			"group": "build"
+		},
+		{
+			"label": "Upload Button 2",
+			"type": "shell",
+			"command": "platformio run --target upload",
+			"group": "build"
 		}
 	]
 }

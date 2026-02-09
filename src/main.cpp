@@ -24,6 +24,7 @@
 // Pins des boutons
 #define BTN_RECORD  0    // Bouton pour enregistrer
 #define BTN_PLAY    1    // Bouton pour rejouer
+#define BTN_PLAY2   2    // Bouton pour rejouer (2ème bouton)
 
 // Paramètres audio
 #define RECORD_TIME_SEC  4                    // Durée max: 4 secondes
@@ -105,6 +106,7 @@ void setup() {
   // Configuration des pins
   pinMode(BTN_RECORD, INPUT);
   pinMode(BTN_PLAY, INPUT);
+  pinMode(BTN_PLAY2, INPUT);
 
   // Allocation mémoire audio (augmentée pour éviter perte de samples)
   AudioMemory(120);  // Doublé de 60 à 120
@@ -134,6 +136,7 @@ void setup() {
   Serial.println("\n--- PRÊT ---");
   Serial.println("Bouton 0: RECORD (4s max)");
   Serial.println("Bouton 1: PLAY");
+  Serial.println("Bouton 2: PLAY (aussi)");
   Serial.println("Suivez les messages dans le Serial Monitor");
   Serial.println("----------------\n");
 }
@@ -166,8 +169,19 @@ void loop() {
   if (digitalRead(BTN_PLAY) == HIGH && !isRecording) {
     delay(50);  // Anti-rebond (OK car pas pendant enregistrement)
     if (digitalRead(BTN_PLAY) == HIGH) {
+      Serial.println("[INFO] Bouton 1 pressé");
       playRecording();
       while (digitalRead(BTN_PLAY) == HIGH) delay(10);  // Attendre relâchement
+    }
+  }
+
+  // Bouton PLAY 2 (même fonction que bouton 1)
+  if (digitalRead(BTN_PLAY2) == HIGH && !isRecording) {
+    delay(50);  // Anti-rebond
+    if (digitalRead(BTN_PLAY2) == HIGH) {
+      Serial.println("[INFO] Bouton 2 pressé");
+      playRecording();
+      while (digitalRead(BTN_PLAY2) == HIGH) delay(10);  // Attendre relâchement
     }
   }
 
