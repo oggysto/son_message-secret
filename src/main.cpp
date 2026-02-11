@@ -24,8 +24,6 @@ AudioInputI2S i2s_input;      // Entrée I2S depuis le codec
 // FILTRES D'ENTRÉE (chaîne de traitement)
 AudioFilterBiquad filterHP;   // Filtre passe-haut (100 Hz)
 AudioFilterBiquad filterLP;   // Filtre passe-bas (8 kHz)
-AudioEffectMultiply noiseGate; // Noise gate (via envelope)
-AudioSynthWaveformDc gateControl; // Contrôle du gate
 
 AudioRecordQueue recordQueue;    // Queue pour capturer l'audio
 
