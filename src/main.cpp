@@ -20,10 +20,18 @@
 
 // Entrée microphone
 AudioInputI2S i2s_input;      // Entrée I2S depuis le codec
+
+// FILTRES D'ENTRÉE (chaîne de traitement)
+AudioFilterBiquad filterHP;   // Filtre passe-haut (100 Hz)
+AudioFilterBiquad filterLP;   // Filtre passe-bas (8 kHz)
+AudioEffectMultiply noiseGate; // Noise gate (via envelope)
+AudioSynthWaveformDc gateControl; // Contrôle du gate
+
 AudioRecordQueue recordQueue;    // Queue pour capturer l'audio
 
 // Sortie: Playback
 AudioPlayQueue playQueue;      // Queue pour jouer depuis RAM
+
 AudioOutputI2S i2s_output;     // Sortie I2S vers le codec
 
 // Mixeur pour combiner playQueue et testTone
@@ -34,19 +42,27 @@ AudioMixer4 mixerRight;
 AudioControlSGTL5000 audioShield;
 
 // Connexions (patch cords)
-AudioConnection patchCord1(i2s_input, 1, recordQueue, 0);     // Mic RIGHT → Record Queue
-AudioConnection patchCord2(playQueue, 0, mixerLeft, 0);       // PlayQueue → Mixer L
-AudioConnection patchCord3(playQueue, 0, mixerRight, 0);      // PlayQueue → Mixer R
+// CHAÎNE D'ENTRÉE : Mic → Passe-Haut → Passe-Bas → Record Queue
+AudioConnection patchCord1(i2s_input, 1, filterHP, 0);        // Mic RIGHT → Filtre Passe-Haut
+AudioConnection patchCord2(filterHP, 0, filterLP, 0);         // Passe-Haut → Passe-Bas
+AudioConnection patchCord3(filterLP, 0, recordQueue, 0);      // Passe-Bas → Record Queue
+
+// CHAÎNE DE SORTIE : PlayQueue → Mixer → Out (compresseur appliqué dans playRecordingReversed)
+AudioConnection patchCord4(playQueue, 0, mixerLeft, 0);       // PlayQueue → Mixer L
+AudioConnection patchCord5(playQueue, 0, mixerRight, 0);      // PlayQueue → Mixer R
 AudioConnection patchCord6(mixerLeft, 0, i2s_output, 0);      // Mixer L → Left Out
 AudioConnection patchCord7(mixerRight, 0, i2s_output, 1);     // Mixer R → Right Out
 
 // Déclaration des fonctions
 
+void setupFilters();
 void startRecording();
 void handleRecording();
 void stopRecording();
 void playRecordingReversed();
 int16_t softClip(int16_t sample);
+int16_t compressor(int16_t sample);
+float analyzeNoiseLevel();
 
 // Variables globales
 
@@ -59,6 +75,14 @@ bool canRecord = true;  // Cooldown entre enregistrements
 unsigned long recordStartTime = 0;
 unsigned long lastRecordEndTime = 0;
 
+// Paramètres des filtres
+float noiseThreshold = 0.02;  // Seuil du noise gate (ajustable)
+
+// Paramètres du compresseur
+float compThreshold = 0.5;    // Seuil de compression (50% du max)
+float compRatio = 4.0;        // Ratio 4:1
+float compGain = 0.0;         // Gain actuel du compresseur (envelope follower)
+
 void setup() {
   // Initialisation Serial
   Serial.begin(9600);
@@ -68,8 +92,8 @@ void setup() {
   pinMode(BTN_RECORD, INPUT);
   pinMode(BTN_PLAY, INPUT);
 
-  // Allocation mémoire audio (augmentée pour éviter perte de samples)
-  AudioMemory(120); 
+  // Allocation mémoire audio (augmentée pour filtres)
+  AudioMemory(150); 
 
   // Configuration Audio Shield
   audioShield.enable();
@@ -77,7 +101,10 @@ void setup() {
   
   // Configuration de l'entrée audio
   audioShield.inputSelect(AUDIO_INPUT_MIC);
-  audioShield.micGain(20);  
+  audioShield.micGain(20);
+
+  // Configuration des FILTRES
+  setupFilters();  
 
   // Configuration des mixers
   mixerLeft.gain(0, 1.0);   // PlayQueue sur canal 0 à gain 1.0
@@ -90,10 +117,18 @@ void setup() {
   mixerRight.gain(2, 0);    // Canaux inutilisés
   mixerRight.gain(3, 0);
 
-  Serial.println("\n--- PRÊT ---");
-  Serial.println("Bouton 0: RECORD (4s max)");
-  Serial.println("Bouton 1: PLAY INVERSÉ ");
-  Serial.println("----------------\n");
+  Serial.println("\n========================================");
+  Serial.println("    SYSTÈME D'ENREGISTREMENT FILTRÉ");
+  Serial.println("========================================");
+  Serial.println("FILTRES ACTIFS:");
+  Serial.println("  ✓ Passe-Haut: 100 Hz (élimine rumble)");
+  Serial.println("  ✓ Passe-Bas: 8 kHz (élimine sifflements)");
+  Serial.println("  ✓ Compresseur: Ratio 4:1 (égalise volume)");
+  Serial.println("----------------------------------------");
+  Serial.println("COMMANDES:");
+  Serial.println("  Bouton 0: RECORD (4s max)");
+  Serial.println("  Bouton 1: PLAY INVERSÉ");
+  Serial.println("========================================\n");
 }
 
 void loop() {
@@ -129,6 +164,23 @@ void loop() {
 
 // Fonctions
 
+void setupFilters() {
+  Serial.println("[SETUP] Configuration des filtres...");
+  
+  // 1. FILTRE PASSE-HAUT (100 Hz) - Élimine les basses fréquences
+  // Butterworth 2nd order, Q=0.707 pour réponse plate
+  filterHP.setHighpass(0, 100, 0.707);
+  Serial.println("  ✓ Passe-Haut: 100 Hz, Q=0.707");
+  
+  // 2. FILTRE PASSE-BAS (8 kHz) - Élimine les hautes fréquences
+  filterLP.setLowpass(0, 8000, 0.707);
+  Serial.println("  ✓ Passe-Bas: 8 kHz, Q=0.707");
+  
+  Serial.println("  ✓ Compresseur logiciel: Ratio 4:1, Seuil 50%");
+  
+  Serial.println("[SETUP] Filtres configurés!\n");
+}
+
 void startRecording() {
   Serial.println("\nDÉMARRAGE ENREGISTREMENT");
   
@@ -143,7 +195,7 @@ void startRecording() {
 }
 
 void handleRecording() {
-  // Vérifier timeout (2 secondes)
+  // Vérifier timeout (4 secondes)
   unsigned long elapsed = millis() - recordStartTime;
   if (elapsed >= (RECORD_TIME_SEC * 1000)) {
     Serial.println("Temps max atteint (4s)");
@@ -228,10 +280,13 @@ void playRecordingReversed() {
     // Attendre qu'un buffer soit disponible
     int16_t* txBuffer = playQueue.getBuffer();
     if (txBuffer) {
-      // Copier jusqu'à 128 samples EN SENS INVERSE
+      // Copier jusqu'à 128 samples EN SENS INVERSE avec compresseur
       for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
         if (sampleIndex >= 0) {
-          txBuffer[i] = softClip(audioBuffer[sampleIndex--]);  // Index décrémente
+          // Appliquer compresseur puis soft clipping
+          int16_t sample = audioBuffer[sampleIndex--];
+          sample = compressor(sample);
+          txBuffer[i] = softClip(sample);
         } else {
           txBuffer[i] = 0; 
         }
@@ -251,16 +306,65 @@ void playRecordingReversed() {
   Serial.println("LECTURE INVERSÉE TERMINÉE\n");
 }
 
-// Anti saturation
+// Anti saturation avec VRAI soft clipping
 
 int16_t softClip(int16_t sample) {
   // Convertir en float normalisé [-1.0, 1.0]
   float normalized = sample / 32767.0f;
   
-  // Soft clipping: tanh donne une saturation douce
-  if (normalized > 1.0f) normalized = 1.0f;
-  if (normalized < -1.0f) normalized = -1.0f;
+  // Soft clipping avec fonction tanh (saturation douce)
+  // tanh donne une courbe S qui évite la distortion brutale
+  float clipped = tanh(normalized * 1.5) / 1.5; // Gain pré-saturation
+  
+  // Sécurité finale
+  if (clipped > 1.0f) clipped = 1.0f;
+  if (clipped < -1.0f) clipped = -1.0f;
   
   // Reconvertir en int16
-  return (int16_t)(normalized * 32767.0f);
+  return (int16_t)(clipped * 32767.0f);
+}
+
+// Compresseur dynamique simple (envelope follower)
+int16_t compressor(int16_t sample) {
+  // Convertir en float absolu normalisé
+  float input = abs(sample) / 32767.0f;
+  
+  // Envelope follower (attack/release)
+  float attackCoeff = 0.01;   // Réaction rapide
+  float releaseCoeff = 0.001; // Relâchement lent
+  
+  if (input > compGain) {
+    compGain = compGain + attackCoeff * (input - compGain);
+  } else {
+    compGain = compGain + releaseCoeff * (input - compGain);
+  }
+  
+  // Calculer le gain de réduction
+  float gainReduction = 1.0;
+  if (compGain > compThreshold) {
+    // Au-dessus du seuil: appliquer la compression
+    float over = compGain - compThreshold;
+    gainReduction = compThreshold + (over / compRatio);
+    gainReduction = gainReduction / compGain; // Normaliser
+  }
+  
+  // Appliquer la réduction de gain
+  float output = (sample / 32767.0f) * gainReduction;
+  
+  // Makeup gain (compenser la perte de volume)
+  output *= 1.5;
+  
+  // Limiter
+  if (output > 1.0f) output = 1.0f;
+  if (output < -1.0f) output = -1.0f;
+  
+  return (int16_t)(output * 32767.0f);
+}
+
+// Analyse du niveau de bruit ambiant (pour ajuster le gate si besoin)
+float analyzeNoiseLevel() {
+  // Cette fonction pourrait être appelée avant l'enregistrement
+  // pour calibrer automatiquement le noise gate
+  // (Non implémentée dans cette version)
+  return noiseThreshold;
 }
